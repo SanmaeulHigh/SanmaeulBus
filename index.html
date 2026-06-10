@@ -470,6 +470,8 @@ const WORKER_URL = "https://sanmaeul-bus.choiyunhwan.workers.dev";
 // 귀가 방향 정류소
 const RT_STOP = {"71":"43286","60-5":"43286"};
 const RT_POLL_MS = 30000; // 실시간 API 재조회 간격: 30초
+const REALTIME_ETA_OFFSET_SEC = 60; // 카카오맵 대비 표시 보정: 화면 표시용으로 60초 차감
+const SOON_ARRIVAL_THRESHOLD_SEC = 90; // 보정 후 남은 시간이 90초 이하이면 잠시 후 도착으로 표시
 const RT_RETRY_MS = 12000;
 const RT_FAIL_RECOVER_MS = 45000;
 
@@ -494,17 +496,26 @@ function fmtSec(sec){
 }
 
 function remainingEta(data){
+  // API 원본 기준 남은 시간. 새 응답이 기존 표시보다 늘어나는지 판단할 때 사용합니다.
   if(!data || !Number.isFinite(Number(data.etaSec))) return null;
   const fetchedAt = Number(data.fetchedAt) || Date.now();
   const elapsed = Math.floor((Date.now() - fetchedAt) / 1000);
   return Math.max(0, Math.round(Number(data.etaSec) - elapsed));
 }
 
-function realtimeArrivalText(data){
+function displayRemainingEta(data){
+  // 화면 표시용 남은 시간. 카카오맵보다 약 1분 늦게 보이는 문제를 줄이기 위해 60초를 차감합니다.
   const rem = remainingEta(data);
+  if(rem === null) return null;
+  return Math.max(0, rem - REALTIME_ETA_OFFSET_SEC);
+}
+
+function realtimeArrivalText(data){
+  const rem = displayRemainingEta(data);
   if(data && data.stopsBefore !== null && data.stopsBefore !== undefined && Number(data.stopsBefore) <= 1){
     return "잠시 후 도착";
   }
+  if(rem !== null && rem <= SOON_ARRIVAL_THRESHOLD_SEC) return "잠시 후 도착";
   return fmtSec(rem);
 }
 
@@ -580,6 +591,7 @@ async function pollOnce(routeNum){
 
   // 이미 표시 중인 남은 시간보다 API 값이 늘어나면 화면에는 반영하지 않음
   // (카카오/공공 API 보정으로 도착 시간이 갑자기 증가해 보이는 현상 완화)
+  // 비교는 API 원본 남은 시간 기준으로 하고, 화면 표시는 별도의 60초 보정값을 적용합니다.
   const prevRemain = remainingEta(st.data);
   if(st.status === "LIVE" && prevRemain !== null && result.etaSec > prevRemain){
     scheduleNext(routeNum, RT_POLL_MS);
@@ -689,8 +701,9 @@ setInterval(() => {
     const base = parseInt(el.dataset.sec);
     const ts   = parseInt(el.dataset.ts);
     const elapsed = Math.floor((Date.now() - ts) / 1000);
-    const cur = Math.max(0, base - elapsed);
-    el.textContent = fmtSec(cur);
+    const rawRemain = Math.max(0, base - elapsed);
+    const cur = Math.max(0, rawRemain - REALTIME_ETA_OFFSET_SEC);
+    el.textContent = cur <= SOON_ARRIVAL_THRESHOLD_SEC ? "잠시 후 도착" : fmtSec(cur);
   });
 }, 1000);
 
@@ -727,11 +740,12 @@ function rtBlock(routeNum, lineTag, transferHtml){
   // LIVE
   const a = st.data;
   if(!a || !Number.isFinite(Number(a.etaSec))) return null;
-  const displayEta = remainingEta(a);
+  const displayEta = displayRemainingEta(a);
   const nearStop = a.stopsBefore !== null && a.stopsBefore !== undefined && Number(a.stopsBefore) <= 1;
-  const soon = nearStop || (displayEta !== null && displayEta < 180);
+  const soonArrival = nearStop || (displayEta !== null && displayEta <= SOON_ARRIVAL_THRESHOLD_SEC);
+  const soon = soonArrival || (displayEta !== null && displayEta < 180);
   const stopsText = (a.stopsBefore === null || a.stopsBefore === undefined) ? "정거장 정보 확인 중" : `${a.stopsBefore}정거장 전`;
-  const mainTime = nearStop
+  const mainTime = soonArrival
     ? `<span class="nt">잠시 후 도착</span>`
     : `<span class="nt rt-sec" data-sec="${a.etaSec}" data-ts="${a.fetchedAt}">${fmtSec(displayEta)}</span>`;
   return `<div class="line">${head}
