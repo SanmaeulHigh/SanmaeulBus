@@ -425,7 +425,7 @@ function viewHome(){
 }
 
 function viewOut(){
-  let h=`<div class="hint">강화읍(터미널)로 나가는 경로예요. <b>학교 주차장 앞에서 바로 탑승</b>할 수 있어요(도보 불필요).</div>`;
+  let h='';
   h+=`<div class="card"><div class="ctop"><span class="pill navy">루트 ③</span><span class="cname">학교 앞 → 강화터미널</span><span class="stop-chip">산마을고등학교(43599)</span></div>
     ${lineBlock("46","지선",DATA.bus46,false,false)}
     ${lineBlock("45","지선",DATA.bus45,false,false)}
@@ -463,7 +463,7 @@ const WORKER_URL = "https://sanmaeul-bus.choiyunhwan.workers.dev";
 
 // 귀가 방향 정류소
 const RT_STOP = {"71":"43286","60-5":"43286"};
-const RT_POLL_MS = 20000;
+const RT_POLL_MS = 20000; // 실시간 API 재조회 간격: 20초
 const RT_RETRY_MS = 12000;
 const RT_FAIL_RECOVER_MS = 45000;
 
@@ -723,7 +723,7 @@ function applyKakaoBlinkState(){
   });
 }
 
-setInterval(checkRealtimeTrigger, 60000);
+setInterval(checkRealtimeTrigger, RT_POLL_MS);
 checkRealtimeTrigger();
 
 tick();render();setInterval(tick,1000);setInterval(render,30000);
