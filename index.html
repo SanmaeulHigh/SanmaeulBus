@@ -374,7 +374,9 @@ function closeModal(e){if(!e||e.target===document.getElementById('modal-bg'))doc
 
 function lineBlock(num,tag,items,hasDep,offsetWalk,transferHtml=""){
   // 실시간 상태이면 rtBlock 우선 사용 (귀가 탭, 71/60-5)
-  if(mode==='home' && (num==='71'||num==='60-5')){
+  const useRealtime = (mode==='home' && (num==='71'||num==='60-5'));
+  const realtimeFailed = useRealtime && rtState[num] && rtState[num].status === "FAIL";
+  if(useRealtime){
     const rt = rtBlock(num, tag, transferHtml);
     if(rt !== null) return rt;
   }
@@ -386,6 +388,9 @@ function lineBlock(num,tag,items,hasDep,offsetWalk,transferHtml=""){
   const up=arr.filter(t=>toMin(t)>=threshold);
   const infoBtn=`<span class="ibtn" onclick="openModal()" title="실측 기반이란?">i</span>`;
   let h=`<div class="line"><div class="lhead">${rno(num)}<span class="ltag">${tag}</span> ${infoBtn}${transferHtml}</div>`;
+  if(realtimeFailed){
+    h+=`<div class="rt-fail">⚠ 실시간 정보를 불러오지 못했습니다.<br>아래 시각은 요일별 과거 운행 기반 예상 시각입니다.</div>`;
+  }
   if(up.length===0){h+=`<div class="endmsg">오늘 운행 종료 (막차 ${lastT}) · 카카오맵에서 확인</div></div>`;return h;}
   const nx=up[0], cd=toMin(nx)-n, cls=cd<8?"cd soon":"cd";
   const later=up.slice(1,7);
@@ -403,7 +408,7 @@ function lineBlock(num,tag,items,hasDep,offsetWalk,transferHtml=""){
 }
 
 function kbtn(url,stnum,label){
-  return `<a class="kbtn" href="${url}" target="_blank" rel="noopener"><img src="${KAKAO_ICON}" alt="">${label} <span class="stnum">(${stnum})</span></a>`;
+  return `<a class="kbtn" data-stop="${stnum}" href="${url}" target="_blank" rel="noopener"><img src="${KAKAO_ICON}" alt="">${label} <span class="stnum">(${stnum})</span></a>`;
 }
 
 function viewHome(){
@@ -450,7 +455,7 @@ function tick(){
 }
 
 /* ═══════════════════════════════════════════════════════
-   실시간 도착 정보 연동 v2
+   실시간 도착 정보 연동 v3
    상태: SCHEDULE → LOADING → LIVE / FAIL → SCHEDULE
          LIVE → PASSED → SCHEDULE (버스 지나감)
 ═══════════════════════════════════════════════════════ */
@@ -458,69 +463,113 @@ const WORKER_URL = "https://sanmaeul-bus.choiyunhwan.workers.dev";
 
 // 귀가 방향 정류소
 const RT_STOP = {"71":"43286","60-5":"43286"};
+const RT_POLL_MS = 20000;
+const RT_RETRY_MS = 12000;
+const RT_FAIL_RECOVER_MS = 45000;
 
 // 상태: SCHEDULE | LOADING | LIVE | FAIL | PASSED
 const rtState = {
-  "71":   {status:"SCHEDULE", data:null, failCount:0, timer:null},
-  "60-5": {status:"SCHEDULE", data:null, failCount:0, timer:null},
+  "71":   {status:"SCHEDULE", data:null, failCount:0, emptyCount:0, timer:null, failTimer:null},
+  "60-5": {status:"SCHEDULE", data:null, failCount:0, emptyCount:0, timer:null, failTimer:null},
 };
 
+function escapeHTML(v){
+  return String(v ?? "").replace(/[&<>"']/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
+}
+
 function fmtSec(sec){
+  sec = Number(sec);
+  if(!Number.isFinite(sec) || sec < 0) return "도착정보 확인 중";
+  sec = Math.round(sec);
   if(sec < 10) return "곧 도착";
   if(sec < 60) return sec + "초 후";
   const m = Math.floor(sec/60), s = sec % 60;
   return m + "분 " + (s ? s+"초 " : "") + "후";
 }
 
+function normalizeArrival(raw){
+  if(!raw || typeof raw !== "object") return undefined;
+  const etaSec = Number(raw.etaSec);
+  if(!Number.isFinite(etaSec) || etaSec < 0) return undefined;
+
+  const stops = Number(raw.stopsBefore);
+  return {
+    etaSec: Math.round(etaSec),
+    stopsBefore: Number.isFinite(stops) && stops >= 0 ? Math.round(stops) : null,
+    currentStop: escapeHTML(raw.currentStop || "위치 정보 확인 중"),
+    isLastBus: raw.isLastBus === true || raw.isLastBus === "true" || raw.isLastBus === "Y",
+  };
+}
+
 async function fetchArrival(routeNum){
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 5000);
   try{
-    const res = await fetch(`${WORKER_URL}/arrive?stop=${RT_STOP[routeNum]}&route=${routeNum}`);
+    const url = `${WORKER_URL}/arrive?stop=${encodeURIComponent(RT_STOP[routeNum])}&route=${encodeURIComponent(routeNum)}`;
+    const res = await fetch(url, {signal: controller.signal, cache: "no-store"});
+    if(!res.ok) throw new Error("API 응답 오류: " + res.status);
     const j = await res.json();
-    return (j.arrivals && j.arrivals.length > 0) ? j.arrivals[0] : null;
-  } catch { return undefined; } // undefined = 네트워크 오류, null = 빈 배열
+    const arrivals = Array.isArray(j?.arrivals) ? j.arrivals : [];
+    if(arrivals.length === 0) return null;
+    return normalizeArrival(arrivals[0]);
+  } catch {
+    return undefined;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 async function pollOnce(routeNum){
   const st = rtState[routeNum];
+  if(!st || st.status === "SCHEDULE" || st.status === "PASSED") return;
+
+  if(!realtimeWindowActive(routeNum)){
+    resetRealtime(routeNum);
+    render();
+    return;
+  }
+
   const result = await fetchArrival(routeNum);
 
   if(result === undefined){
-    // 네트워크 오류
+    // 네트워크 오류 또는 응답 형식 오류: 바로 실패 처리하지 않고 재시도
     st.failCount++;
     if(st.failCount >= 3){ setStatus(routeNum, "FAIL"); return; }
-    scheduleNext(routeNum);
+    scheduleNext(routeNum, RT_RETRY_MS);
+    render();
     return;
   }
 
   if(result === null){
-    // 빈 배열
-    if(st.status === "LOADING"){
-      // 첫 호출인데 빈 배열 → 출발 예정 시각이 지난 상태 → FAIL
-      setStatus(routeNum, "FAIL");
-      return;
-    }
-    if(st.status === "LIVE"){
-      // 실시간이었는데 빈 배열 → 버스 지나감 → PASSED
+    // 빈 배열: 출발 직후 API 반영 지연일 수 있으므로 3회까지 재시도
+    st.emptyCount++;
+    if(st.status === "LIVE" && st.emptyCount >= 2){
       setStatus(routeNum, "PASSED");
       return;
     }
-    st.failCount++;
-    if(st.failCount >= 3){ setStatus(routeNum, "FAIL"); return; }
-    scheduleNext(routeNum);
+    if(st.emptyCount >= 3){ setStatus(routeNum, "FAIL"); return; }
+    scheduleNext(routeNum, RT_RETRY_MS);
+    render();
     return;
   }
 
   // 데이터 있음
   st.failCount = 0;
+  st.emptyCount = 0;
   st.data = {...result, fetchedAt: Date.now()};
   setStatus(routeNum, "LIVE");
-  scheduleNext(routeNum);
+  scheduleNext(routeNum, RT_POLL_MS);
 }
 
-function scheduleNext(routeNum){
+function scheduleNext(routeNum, delay=RT_POLL_MS){
   const st = rtState[routeNum];
   if(st.timer) clearTimeout(st.timer);
-  st.timer = setTimeout(() => pollOnce(routeNum), 20000);
+  st.timer = setTimeout(() => pollOnce(routeNum), delay);
+}
+
+function clearRealtimeTimers(st){
+  if(st.timer){ clearTimeout(st.timer); st.timer = null; }
+  if(st.failTimer){ clearTimeout(st.failTimer); st.failTimer = null; }
 }
 
 function setStatus(routeNum, status){
@@ -528,15 +577,26 @@ function setStatus(routeNum, status){
   st.status = status;
 
   if(status === "PASSED" || status === "FAIL"){
-    // 폴링 중단
     if(st.timer){ clearTimeout(st.timer); st.timer = null; }
     st.data = null;
-    // PASSED: 즉시 다음 차 시간표로 (렌더만 하면 됨)
-    // FAIL: 렌더에서 에러 UI 표시
     render();
+
     if(status === "PASSED"){
-      // 5초 후 SCHEDULE로 완전 복귀
-      setTimeout(() => { st.status = "SCHEDULE"; st.failCount = 0; render(); }, 5000);
+      // 5초 후 시간표 상태로 복귀
+      setTimeout(() => { st.status = "SCHEDULE"; st.failCount = 0; st.emptyCount = 0; render(); }, 5000);
+    } else {
+      // 실패 상태도 오래 고정하지 않고 잠시 후 자동 재시도 가능 상태로 복귀
+      if(st.failTimer) clearTimeout(st.failTimer);
+      st.failTimer = setTimeout(() => {
+        if(st.status === "FAIL"){
+          st.status = "SCHEDULE";
+          st.failCount = 0;
+          st.emptyCount = 0;
+          st.failTimer = null;
+          render();
+          checkRealtimeTrigger();
+        }
+      }, RT_FAIL_RECOVER_MS);
     }
     return;
   }
@@ -547,41 +607,49 @@ function setStatus(routeNum, status){
 function startRealtime(routeNum){
   const st = rtState[routeNum];
   if(st.status !== "SCHEDULE") return;
+  clearRealtimeTimers(st);
   st.status = "LOADING";
+  st.data = null;
   st.failCount = 0;
+  st.emptyCount = 0;
   render();
   pollOnce(routeNum);
 }
 
 function resetRealtime(routeNum){
   const st = rtState[routeNum];
-  if(st.timer){ clearTimeout(st.timer); st.timer = null; }
+  clearRealtimeTimers(st);
   st.status = "SCHEDULE";
   st.data = null;
   st.failCount = 0;
+  st.emptyCount = 0;
+}
+
+function realtimePairsToday(routeNum){
+  if(routeNum === "71") return bus71Today();
+  if(routeNum === "60-5") return bus605Today();
+  return [];
+}
+
+function realtimeWindowActive(routeNum){
+  const n = nowMin();
+  return realtimePairsToday(routeNum).some(pair => {
+    const arr = pair[0], dep = pair[1];
+    if(!arr || !dep) return false;
+    const d = toMin(dep);
+    const a = toMin(arr);
+    // 출발 2분 뒤부터 예상 도착 시각 + 5분까지만 실시간 정보를 우선 표시
+    return n >= d + 2 && n <= a + 5;
+  });
 }
 
 function checkRealtimeTrigger(){
-  const n = nowMin();
-  const wk = weekdayKey();
-  const depMap = {
-    "71":   BUS71_DEP_BY_DAY[wk]  || BUS71_DEP_WEEKDAY,
-    "60-5": BUS605_DEP_BY_DAY[wk] || BUS605_DEP,
-  };
-  Object.entries(depMap).forEach(([num, depArr]) => {
+  Object.keys(rtState).forEach(num => {
     const st = rtState[num];
-    if(st.status === "LOADING" || st.status === "LIVE") return;
+    const running = realtimeWindowActive(num);
 
-    // 다음 차 = 아직 출발 안 한 가장 가까운 차 (현재 시각 이후 첫 출발편)
-    const nextDep = depArr.find(dep => toMin(dep) > n - 2); // 2분 여유
-    if(!nextDep){ if(st.status==="FAIL") resetRealtime(num); return; }
-
-    const d = toMin(nextDep);
-    // 해당 차의 출발+2분 ~ 출발+90분 사이일 때만 트리거
-    const inWindow = n >= d + 2 && n <= d + 90;
-
-    if(inWindow && st.status === "SCHEDULE") startRealtime(num);
-    if(!inWindow && st.status === "FAIL") resetRealtime(num);
+    if(running && st.status === "SCHEDULE") startRealtime(num);
+    if(!running && st.status !== "SCHEDULE") resetRealtime(num);
   });
 }
 
@@ -602,20 +670,24 @@ function rtBlock(routeNum, lineTag, transferHtml){
   const infoBtn = `<span class="ibtn" onclick="openModal()" title="실측 기반이란?">i</span>`;
   const head = `<div class="lhead">${rno(routeNum)}<span class="ltag">${lineTag}</span> ${infoBtn}${transferHtml}</div>`;
 
+  if(st.status !== "SCHEDULE" && !realtimeWindowActive(routeNum)){
+    resetRealtime(routeNum);
+    return null;
+  }
+
   if(st.status === "SCHEDULE") return null; // 기존 시간표 사용
 
   if(st.status === "LOADING"){
+    const msg = (st.failCount || st.emptyCount)
+      ? "실시간 정보 확인 중... 잠시 후 다시 시도합니다."
+      : "실시간 정보 불러오는 중...";
     return `<div class="line">${head}
-      <div class="rt-loading"><span class="rt-spinner"></span>실시간 정보 불러오는 중...</div>
+      <div class="rt-loading"><span class="rt-spinner"></span>${msg}</div>
     </div>`;
   }
 
   if(st.status === "FAIL"){
-    return `<div class="line">${head}
-      <div class="rt-fail">
-        ⚠ 실시간 정보를 불러오지 못했습니다.<br>카카오맵에서 직접 확인해 주세요.
-      </div>
-    </div>`;
+    return null; // lineBlock에서 실패 안내 + 기존 시간표를 함께 표시
   }
 
   if(st.status === "PASSED"){
@@ -624,14 +696,16 @@ function rtBlock(routeNum, lineTag, transferHtml){
 
   // LIVE
   const a = st.data;
+  if(!a || !Number.isFinite(Number(a.etaSec))) return null;
   const soon = a.etaSec < 180;
+  const stopsText = (a.stopsBefore === null || a.stopsBefore === undefined) ? "정거장 정보 확인 중" : `${a.stopsBefore}정거장 전`;
   return `<div class="line">${head}
     <div class="rt-live">
       <div class="next">
         <div class="next-core">
           <span class="nt rt-sec" data-sec="${a.etaSec}" data-ts="${a.fetchedAt}">${fmtSec(a.etaSec)}</span>
           <span class="rt-badge">🔴 실시간</span>
-          <span class="${soon?'cd soon':'cd'}">${a.stopsBefore}정거장 전</span>
+          <span class="${soon?'cd soon':'cd'}">${stopsText}</span>
         </div>
       </div>
       <div class="rt-detail">현재 <b>${a.currentStop}</b> 부근${a.isLastBus?' · <span class="last-badge">막차</span>':''}</div>
@@ -639,11 +713,13 @@ function rtBlock(routeNum, lineTag, transferHtml){
   </div>`;
 }
 
-// 카카오맵 버튼 깜빡임 제어 (FAIL 상태일 때)
+// 카카오맵 버튼 깜빡임 제어 (FAIL 상태일 때 해당 정류장 버튼만)
 function applyKakaoBlinkState(){
-  const anyFail = Object.values(rtState).some(s => s.status === "FAIL");
+  const failStops = new Set(Object.entries(rtState)
+    .filter(([, s]) => s.status === "FAIL")
+    .map(([route]) => RT_STOP[route]));
   document.querySelectorAll('.kbtn').forEach(el => {
-    el.classList.toggle('kbtn-blink', anyFail);
+    el.classList.toggle('kbtn-blink', failStops.has(el.dataset.stop));
   });
 }
 
