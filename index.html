@@ -183,13 +183,22 @@
   .stops{font-size:10.5px;color:#8FA6BF;margin-top:8px;line-height:1.6;}
   .upd{text-align:center;font-size:10px;color:#A9B6C5;margin:13px 0 0;}
 
-  /* 실시간 연동 */
-  .rt-live{background:#FFF8F8;border-radius:10px;padding:8px 10px;margin:8px 0 0;}
+  /* 실시간 연동 v2 */
+  .rt-live{background:#F0F7FF;border-radius:10px;padding:9px 11px;margin:8px 0 0;}
   .rt-badge{font-size:11px;font-weight:900;color:#E83329;background:#FBEEEB;
     padding:2px 7px;border-radius:6px;margin-left:4px;animation:rtpulse 1.5s infinite;}
-  @keyframes rtpulse{0%,100%{opacity:1}50%{opacity:.5}}
+  .rt-loading{font-size:12px;color:var(--muted);font-weight:700;padding:8px 0 2px;
+    display:flex;align-items:center;gap:6px;}
+  .rt-spinner{width:13px;height:13px;border:2px solid var(--line);
+    border-top-color:var(--blue);border-radius:50%;animation:rtspin .8s linear infinite;flex-shrink:0;}
+  .rt-fail{background:var(--warn-soft);border-radius:10px;padding:9px 11px;margin:8px 0 0;
+    font-size:12px;color:#7A2D22;font-weight:700;line-height:1.5;}
   .rt-detail{font-size:11.5px;color:var(--muted);margin-top:4px;font-weight:600;line-height:1.4;}
   .last-badge{color:var(--warn);font-weight:900;}
+  .kbtn-blink{animation:kblink 1s ease-in-out infinite;}
+  @keyframes rtpulse{0%,100%{opacity:1}50%{opacity:.5}}
+  @keyframes rtspin{to{transform:rotate(360deg)}}
+  @keyframes kblink{0%,100%{filter:brightness(1)}50%{filter:brightness(.75)}}
 </style>
 </head>
 <body>
@@ -354,10 +363,10 @@ function openModal(){document.getElementById('modal-bg').classList.add('open');}
 function closeModal(e){if(!e||e.target===document.getElementById('modal-bg'))document.getElementById('modal-bg').classList.remove('open');}
 
 function lineBlock(num,tag,items,hasDep,offsetWalk,transferHtml=""){
-  // 실시간 데이터 우선 사용 (귀가 탭, 71/60-5)
-  if(mode==='home'&&(num==='71'||num==='60-5')){
-    const rt=rtBlock(num,tag,transferHtml);
-    if(rt) return rt;
+  // 실시간 상태이면 rtBlock 우선 사용 (귀가 탭, 71/60-5)
+  if(mode==='home' && (num==='71'||num==='60-5')){
+    const rt = rtBlock(num, tag, transferHtml);
+    if(rt !== null) return rt;
   }
   const n=nowMin();
   const threshold=(mode==='home'&&walkOn&&offsetWalk)?n+WALK_MIN:n;
@@ -415,7 +424,10 @@ function viewOut(){
 
 function prepBtn(){ return ''; }
 
-function render(){document.getElementById('view').innerHTML=(mode==='home')?viewHome():viewOut();}
+function render(){
+  document.getElementById('view').innerHTML=(mode==='home')?viewHome():viewOut();
+  applyKakaoBlinkState();
+}
 function setMode(m){mode=m;document.getElementById('tab-home').classList.toggle('on',m==='home');document.getElementById('tab-out').classList.toggle('on',m==='out');render();}
 function toggleWalk(){walkOn=!walkOn;render();}
 function tick(){
@@ -427,87 +439,188 @@ function tick(){
   document.getElementById('day').textContent=y+"년 "+mo+"월 "+dd+"일 "+days[d.getDay()]+"요일";
 }
 
-/* ═══════════════════════════════════════════
-   실시간 도착 정보 연동 v1
-   출발 예정 시각 +2분부터 폴링 시작 (20초 간격)
-   빈 배열이면 기존 시간표로 자동 폴백
-═══════════════════════════════════════════ */
-const WORKER_URL="https://sanmaeul-bus.choiyunhwan.workers.dev";
-const RT_STOP={"71":"43286","60-5":"43286"};
-const rtState={
-  "71":  {data:null,lastFetch:0,active:false,timer:null},
-  "60-5":{data:null,lastFetch:0,active:false,timer:null}
+/* ═══════════════════════════════════════════════════════
+   실시간 도착 정보 연동 v2
+   상태: SCHEDULE → LOADING → LIVE / FAIL → SCHEDULE
+         LIVE → PASSED → SCHEDULE (버스 지나감)
+═══════════════════════════════════════════════════════ */
+const WORKER_URL = "https://sanmaeul-bus.choiyunhwan.workers.dev";
+
+// 귀가 방향 정류소
+const RT_STOP = {"71":"43286","60-5":"43286"};
+
+// 상태: SCHEDULE | LOADING | LIVE | FAIL | PASSED
+const rtState = {
+  "71":   {status:"SCHEDULE", data:null, failCount:0, timer:null},
+  "60-5": {status:"SCHEDULE", data:null, failCount:0, timer:null},
 };
 
 function fmtSec(sec){
-  if(sec<10) return "곧 도착";
-  if(sec<60) return sec+"초 후";
-  const m=Math.floor(sec/60),s=sec%60;
-  return m+"분 "+(s?s+"초 ":"")+"후";
+  if(sec < 10) return "곧 도착";
+  if(sec < 60) return sec + "초 후";
+  const m = Math.floor(sec/60), s = sec % 60;
+  return m + "분 " + (s ? s+"초 " : "") + "후";
 }
 
 async function fetchArrival(routeNum){
   try{
-    const res=await fetch(`${WORKER_URL}/arrive?stop=${RT_STOP[routeNum]}&route=${routeNum}`);
-    const j=await res.json();
-    return (j.arrivals&&j.arrivals.length>0)?j.arrivals[0]:null;
-  }catch{return null;}
+    const res = await fetch(`${WORKER_URL}/arrive?stop=${RT_STOP[routeNum]}&route=${routeNum}`);
+    const j = await res.json();
+    return (j.arrivals && j.arrivals.length > 0) ? j.arrivals[0] : null;
+  } catch { return undefined; } // undefined = 네트워크 오류, null = 빈 배열
 }
 
-async function pollArrival(routeNum){
-  const st=rtState[routeNum];
-  if(!st.active) return;
-  const result=await fetchArrival(routeNum);
-  st.data=result;
-  st.lastFetch=Date.now();
+async function pollOnce(routeNum){
+  const st = rtState[routeNum];
+  const result = await fetchArrival(routeNum);
+
+  if(result === undefined){
+    // 네트워크 오류
+    st.failCount++;
+    if(st.failCount >= 3){ setStatus(routeNum, "FAIL"); return; }
+    scheduleNext(routeNum);
+    return;
+  }
+
+  if(result === null){
+    // 빈 배열
+    if(st.status === "LOADING"){
+      // 첫 호출인데 빈 배열 → 출발 예정 시각이 지난 상태 → FAIL
+      setStatus(routeNum, "FAIL");
+      return;
+    }
+    if(st.status === "LIVE"){
+      // 실시간이었는데 빈 배열 → 버스 지나감 → PASSED
+      setStatus(routeNum, "PASSED");
+      return;
+    }
+    st.failCount++;
+    if(st.failCount >= 3){ setStatus(routeNum, "FAIL"); return; }
+    scheduleNext(routeNum);
+    return;
+  }
+
+  // 데이터 있음
+  st.failCount = 0;
+  st.data = {...result, fetchedAt: Date.now()};
+  setStatus(routeNum, "LIVE");
+  scheduleNext(routeNum);
+}
+
+function scheduleNext(routeNum){
+  const st = rtState[routeNum];
+  if(st.timer) clearTimeout(st.timer);
+  st.timer = setTimeout(() => pollOnce(routeNum), 20000);
+}
+
+function setStatus(routeNum, status){
+  const st = rtState[routeNum];
+  st.status = status;
+
+  if(status === "PASSED" || status === "FAIL"){
+    // 폴링 중단
+    if(st.timer){ clearTimeout(st.timer); st.timer = null; }
+    st.data = null;
+    // PASSED: 즉시 다음 차 시간표로 (렌더만 하면 됨)
+    // FAIL: 렌더에서 에러 UI 표시
+    render();
+    if(status === "PASSED"){
+      // 5초 후 SCHEDULE로 완전 복귀
+      setTimeout(() => { st.status = "SCHEDULE"; st.failCount = 0; render(); }, 5000);
+    }
+    return;
+  }
+
   render();
-  st.timer=setTimeout(()=>pollArrival(routeNum),20000);
 }
 
 function startRealtime(routeNum){
-  const st=rtState[routeNum];
-  if(st.active) return;
-  st.active=true;
-  pollArrival(routeNum);
+  const st = rtState[routeNum];
+  if(st.status !== "SCHEDULE") return;
+  st.status = "LOADING";
+  st.failCount = 0;
+  render();
+  pollOnce(routeNum);
 }
 
-function stopRealtime(routeNum){
-  const st=rtState[routeNum];
-  st.active=false;
-  st.data=null;
-  if(st.timer){clearTimeout(st.timer);st.timer=null;}
+function resetRealtime(routeNum){
+  const st = rtState[routeNum];
+  if(st.timer){ clearTimeout(st.timer); st.timer = null; }
+  st.status = "SCHEDULE";
+  st.data = null;
+  st.failCount = 0;
 }
 
 function checkRealtimeTrigger(){
-  const n=nowMin();
-  const wk=weekdayKey();
-  const depMap={
-    "71":   BUS71_DEP_BY_DAY[wk]||BUS71_DEP_WEEKDAY,
-    "60-5": BUS605_DEP_BY_DAY[wk]||BUS605_DEP
+  const n = nowMin();
+  const wk = weekdayKey();
+  const depMap = {
+    "71":   BUS71_DEP_BY_DAY[wk]  || BUS71_DEP_WEEKDAY,
+    "60-5": BUS605_DEP_BY_DAY[wk] || BUS605_DEP,
   };
-  Object.entries(depMap).forEach(([num,depArr])=>{
-    const shouldBeActive=depArr.some(dep=>{
-      const d=toMin(dep);
-      return n>=d+2 && n<=d+65; // 출발+2분 ~ +65분 사이
-    });
-    if(shouldBeActive) startRealtime(num);
-    else stopRealtime(num);
+  Object.entries(depMap).forEach(([num, depArr]) => {
+    const st = rtState[num];
+    if(st.status === "LOADING" || st.status === "LIVE") return;
+
+    // 다음 차 = 아직 출발 안 한 가장 가까운 차 (현재 시각 이후 첫 출발편)
+    const nextDep = depArr.find(dep => toMin(dep) > n - 2); // 2분 여유
+    if(!nextDep){ if(st.status==="FAIL") resetRealtime(num); return; }
+
+    const d = toMin(nextDep);
+    // 해당 차의 출발+2분 ~ 출발+90분 사이일 때만 트리거
+    const inWindow = n >= d + 2 && n <= d + 90;
+
+    if(inWindow && st.status === "SCHEDULE") startRealtime(num);
+    if(!inWindow && st.status === "FAIL") resetRealtime(num);
   });
 }
 
-function rtBlock(routeNum,tag,transferHtml){
-  const st=rtState[routeNum];
-  if(!st.data) return null;
-  const a=st.data;
-  const soon=a.etaSec<180;
-  const infoBtn=`<span class="ibtn" onclick="openModal()" title="실측 기반이란?">i</span>`;
-  return `<div class="line">
-    <div class="lhead">${rno(routeNum)}<span class="ltag">${tag}</span> ${infoBtn}${transferHtml}</div>
+// 실시간 카운트다운 (1초마다 DOM 직접 수정, 렌더 없이)
+setInterval(() => {
+  document.querySelectorAll('.rt-sec').forEach(el => {
+    const base = parseInt(el.dataset.sec);
+    const ts   = parseInt(el.dataset.ts);
+    const elapsed = Math.floor((Date.now() - ts) / 1000);
+    const cur = Math.max(0, base - elapsed);
+    el.textContent = fmtSec(cur);
+  });
+}, 1000);
+
+// 실시간 블록 렌더
+function rtBlock(routeNum, lineTag, transferHtml){
+  const st = rtState[routeNum];
+  const infoBtn = `<span class="ibtn" onclick="openModal()" title="실측 기반이란?">i</span>`;
+  const head = `<div class="lhead">${rno(routeNum)}<span class="ltag">${lineTag}</span> ${infoBtn}${transferHtml}</div>`;
+
+  if(st.status === "SCHEDULE") return null; // 기존 시간표 사용
+
+  if(st.status === "LOADING"){
+    return `<div class="line">${head}
+      <div class="rt-loading"><span class="rt-spinner"></span>실시간 정보 불러오는 중...</div>
+    </div>`;
+  }
+
+  if(st.status === "FAIL"){
+    return `<div class="line">${head}
+      <div class="rt-fail">
+        ⚠ 실시간 정보를 불러오지 못했습니다.<br>카카오맵에서 직접 확인해 주세요.
+      </div>
+    </div>`;
+  }
+
+  if(st.status === "PASSED"){
+    return null; // 다음 차 시간표로 즉시 복귀 (SCHEDULE 전환 전 5초간)
+  }
+
+  // LIVE
+  const a = st.data;
+  const soon = a.etaSec < 180;
+  return `<div class="line">${head}
     <div class="rt-live">
       <div class="next">
         <div class="next-core">
-          <span class="nt rt-sec" data-sec="${a.etaSec}" data-ts="${Date.now()}">${fmtSec(a.etaSec)}</span>
-          <span class="rt-badge">🔴실시간</span>
+          <span class="nt rt-sec" data-sec="${a.etaSec}" data-ts="${a.fetchedAt}">${fmtSec(a.etaSec)}</span>
+          <span class="rt-badge">🔴 실시간</span>
           <span class="${soon?'cd soon':'cd'}">${a.stopsBefore}정거장 전</span>
         </div>
       </div>
@@ -516,19 +629,15 @@ function rtBlock(routeNum,tag,transferHtml){
   </div>`;
 }
 
-// 1초마다 실시간 카운트다운 업데이트 (렌더 없이 DOM 직접 수정)
-setInterval(()=>{
-  document.querySelectorAll('.rt-sec').forEach(el=>{
-    const baseSec=parseInt(el.dataset.sec);
-    const baseTs=parseInt(el.dataset.ts);
-    const elapsed=Math.floor((Date.now()-baseTs)/1000);
-    const cur=Math.max(0,baseSec-elapsed);
-    el.textContent=fmtSec(cur);
+// 카카오맵 버튼 깜빡임 제어 (FAIL 상태일 때)
+function applyKakaoBlinkState(){
+  const anyFail = Object.values(rtState).some(s => s.status === "FAIL");
+  document.querySelectorAll('.kbtn').forEach(el => {
+    el.classList.toggle('kbtn-blink', anyFail);
   });
-},1000);
+}
 
-// 실시간 트리거: 1분마다 체크
-setInterval(checkRealtimeTrigger,60000);
+setInterval(checkRealtimeTrigger, 60000);
 checkRealtimeTrigger();
 
 tick();render();setInterval(tick,1000);setInterval(render,30000);
