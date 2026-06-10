@@ -22,17 +22,17 @@
   body{max-width:520px;margin:0 auto;min-height:100vh;background:#fff;padding-bottom:34px;}
 
   /* Header */
-  header{background:var(--navy);color:#fff;padding:16px 18px 14px;position:sticky;top:0;z-index:20;}
-  .hrow{display:flex;align-items:center;gap:11px;}
-  header img.school{height:30px;}
-  .htitle{font-size:14px;font-weight:800;letter-spacing:-0.3px;line-height:1.15;}
-  .htitle small{display:block;font-size:10.5px;color:#A9C0DA;font-weight:600;margin-top:3px;}
+  header{background:var(--navy);color:#fff;padding:13px 14px 11px;position:sticky;top:0;z-index:20;}
+  .hrow{display:flex;align-items:center;gap:9px;}
+  header img.school{height:24px;}
+  .htitle{font-size:12px;font-weight:800;letter-spacing:-0.3px;line-height:1.12;}
+  .htitle small{display:block;font-size:8.5px;color:#A9C0DA;font-weight:600;margin-top:2px;}
   .clock{margin-left:auto;text-align:right;}
-  .clock .t{font-size:22px;font-weight:900;font-variant-numeric:tabular-nums;letter-spacing:0.5px;}
-  .clock .d{font-size:9.5px;color:#A9C0DA;font-weight:600;margin-top:2px;letter-spacing:-0.2px;}
+  .clock .t{font-size:18px;font-weight:900;font-variant-numeric:tabular-nums;letter-spacing:0.4px;}
+  .clock .d{font-size:8px;color:#A9C0DA;font-weight:600;margin-top:1px;letter-spacing:-0.2px;}
 
   /* Tabs */
-  .tabs{display:flex;gap:8px;padding:12px 14px 4px;position:sticky;top:72px;background:#fff;z-index:15;}
+  .tabs{display:flex;gap:8px;padding:12px 14px 4px;position:sticky;top:58px;background:#fff;z-index:15;}
   .tab{flex:1;border:1.5px solid var(--line);background:#fff;border-radius:11px;padding:11px 8px;
     font-size:14px;font-weight:800;color:var(--muted);text-align:center;cursor:pointer;transition:.12s;}
   .tab .em{display:block;font-size:11px;font-weight:600;margin-top:2px;color:var(--muted);}
@@ -216,9 +216,7 @@ function getEndLabel(){
   return (dow===5)?"금요일 13:00 하교":"월~목 16:20 하교";
 }
 function getHintEnd(){
-  const dow=new Date().getDay();
-  if(dow===5) return "수업 종료 <b>13:00(금)</b> → 산문마을 입구까지 <b>도보 약 10분</b>. 아래는 정류장 도착 예상 시각이에요.";
-  return "수업 종료 <b>16:20(월~목)</b> → 산문마을 입구까지 <b>도보 약 10분</b>. 아래는 정류장 도착 예상 시각이에요.";
+  return "";
 }
 
 function toMin(s){const [h,m]=s.split(':').map(Number);return h*60+m;}
@@ -262,7 +260,7 @@ function kbtn(url,stnum,label){
 }
 
 function viewHome(){
-  let h=`<div class="hint">${getHintEnd()}</div>`;
+  let h=``;
   h+=`<div class="walk"><div>🚶 지금 학교에서 출발 기준<div class="sub">현재 시각 + 도보 10분, 탈 수 있는 차만 표시</div></div><div class="sw ${walkOn?'on':''}" onclick="toggleWalk()"></div></div>`;
   h+=`<div class="card rec"><div class="ctop"><span class="pill blue">루트 ①</span><span class="pill rec">가장 많이 이용</span><span class="cname">지하철 환승</span></div>
     <div class="cpath"><span class="st">산문입구 43286</span> <span class="ar">→</span> <span class="st">구래역</span>(김포골드라인) / <span class="st">검단사거리역</span>(인천2호선) <span class="ar">→</span> 지하철</div>
