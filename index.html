@@ -201,6 +201,20 @@
   @keyframes rtpulse{0%,100%{opacity:1}50%{opacity:.5}}
   @keyframes rtspin{to{transform:rotate(360deg)}}
   @keyframes kblink{0%,100%{filter:brightness(1)}50%{filter:brightness(.75)}}
+
+
+  /* PWA install button */
+  .install-wrap{padding:6px 14px 0;background:#fff;}
+  .install-wrap[hidden]{display:none!important;}
+  .install-btn{width:100%;display:flex;align-items:center;justify-content:center;gap:6px;
+    border:1.5px solid var(--blue);background:#F0F7FF;color:var(--blue);border-radius:11px;
+    padding:8px 10px;font-size:12.5px;font-weight:900;line-height:1.25;cursor:pointer;}
+  .install-btn:active{filter:brightness(.96);transform:translateY(1px);}
+  .install-steps{margin:10px 0 0 18px;padding:0;font-size:13px;color:var(--ink);line-height:1.75;font-weight:600;}
+  .install-steps li{margin:2px 0;}
+  .install-note{margin-top:10px;font-size:12px;color:var(--muted);line-height:1.55;}
+  @media (max-width:420px){.install-btn{font-size:11.5px;padding:7px 9px;}}
+
 </style>
 </head>
 <body>
@@ -216,6 +230,12 @@
 <div class="tabs">
   <div class="tab on" id="tab-home" onclick="setMode('home')">집에 갈래요<span class="em">귀가 · 지하철</span></div>
   <div class="tab" id="tab-out" onclick="setMode('out')">강화읍 갈래요<span class="em">외출 · 터미널</span></div>
+</div>
+
+
+
+<div class="install-wrap" id="installWrap" hidden>
+  <button class="install-btn" id="installBtn" type="button" onclick="handleInstallClick()">📲 이 안내 페이지 앱으로 설치</button>
 </div>
 
 <div class="wrap" id="view"></div>
@@ -238,6 +258,17 @@
     <h3><span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;border:2px solid var(--blue);color:var(--blue);font-size:13px;font-style:italic;font-weight:900;">i</span> 실측 기반 데이터란?</h3>
     <p>요일별 과거 운행 시간을 기반으로 카카오맵에서 제공하는 실측 기반 빅데이터 자료입니다.<br><br>교통 상황에 따라 정확하지 않을 수 있으니 반드시 <b>카카오맵에서 실시간 버스 위치</b>를 확인하세요.</p>
     <button class="modal-close" onclick="closeModal()">확인</button>
+  </div>
+</div>
+
+
+
+<!-- PWA Install Modal -->
+<div class="modal-bg" id="install-modal-bg" onclick="closeInstallModal(event)">
+  <div class="modal">
+    <h3>📲 앱 설치 안내</h3>
+    <div id="install-guide-body"></div>
+    <button class="modal-close" onclick="closeInstallModal()">확인</button>
   </div>
 </div>
 
@@ -771,6 +802,114 @@ function applyKakaoBlinkState(){
     el.classList.toggle('kbtn-blink', failStops.has(el.dataset.stop));
   });
 }
+
+
+/* PWA 설치 버튼 */
+let deferredInstallPrompt = null;
+
+function isStandaloneMode(){
+  return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+}
+function isIOSDevice(){
+  return /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+function updateInstallButton(){
+  const wrap = document.getElementById('installWrap');
+  const btn = document.getElementById('installBtn');
+  if(!wrap || !btn) return;
+  if(isStandaloneMode()){
+    wrap.hidden = true;
+    return;
+  }
+  wrap.hidden = false;
+  if(deferredInstallPrompt){
+    btn.textContent = '📲 이 안내 페이지 앱으로 설치';
+  }else if(isIOSDevice()){
+    btn.textContent = '📲 iPhone/iPad 홈 화면에 추가';
+  }else{
+    btn.textContent = '📲 앱 설치/추가 방법 보기';
+  }
+}
+
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  updateInstallButton();
+});
+
+window.addEventListener('appinstalled', () => {
+  deferredInstallPrompt = null;
+  showToast('앱 설치가 완료되었습니다.');
+  updateInstallButton();
+});
+
+async function handleInstallClick(){
+  if(isStandaloneMode()){
+    showToast('이미 앱으로 실행 중입니다.');
+    updateInstallButton();
+    return;
+  }
+  if(deferredInstallPrompt){
+    deferredInstallPrompt.prompt();
+    const choice = await deferredInstallPrompt.userChoice.catch(() => null);
+    deferredInstallPrompt = null;
+    updateInstallButton();
+    if(choice && choice.outcome === 'accepted') showToast('설치가 시작되었습니다.');
+    return;
+  }
+  openInstallModal();
+}
+
+function installGuideHTML(){
+  const ua = navigator.userAgent.toLowerCase();
+  if(isIOSDevice()){
+    return `<p><b>iPhone/iPad Safari</b>에서는 설치 확인창이 자동으로 뜨지 않을 수 있어요. 아래 순서로 홈 화면에 추가해 주세요.</p>
+      <ol class="install-steps">
+        <li>Safari에서 이 페이지를 엽니다.</li>
+        <li>하단 또는 상단의 <b>공유</b> 버튼을 누릅니다.</li>
+        <li><b>홈 화면에 추가</b>를 선택합니다.</li>
+        <li>오른쪽 위 <b>추가</b>를 누릅니다.</li>
+      </ol>`;
+  }
+  if(ua.includes('android')){
+    return `<p><b>Android Chrome</b>에서 설치창이 바로 뜨지 않으면 아래 순서로 추가해 주세요.</p>
+      <ol class="install-steps">
+        <li>Chrome 오른쪽 위 <b>⋮</b> 메뉴를 누릅니다.</li>
+        <li><b>앱 설치</b> 또는 <b>홈 화면에 추가</b>를 선택합니다.</li>
+        <li>확인 또는 설치를 누릅니다.</li>
+      </ol>
+      <div class="install-note">설치 버튼은 HTTPS로 배포된 주소에서 가장 안정적으로 작동합니다.</div>`;
+  }
+  return `<p><b>PC Chrome/Edge</b>에서는 주소창 오른쪽의 설치 아이콘 또는 브라우저 메뉴에서 설치할 수 있습니다.</p>
+    <ol class="install-steps">
+      <li>주소창 오른쪽의 <b>설치</b> 아이콘을 확인합니다.</li>
+      <li>아이콘이 없으면 브라우저 메뉴에서 <b>앱 설치</b>를 선택합니다.</li>
+      <li>설치 후 바탕화면/시작 메뉴에서 실행할 수 있습니다.</li>
+    </ol>
+    <div class="install-note">설치 아이콘이 보이지 않으면 페이지를 한 번 새로고침해 주세요.</div>`;
+}
+function openInstallModal(){
+  const body = document.getElementById('install-guide-body');
+  if(body) body.innerHTML = installGuideHTML();
+  document.getElementById('install-modal-bg').classList.add('open');
+}
+function closeInstallModal(e){
+  const bg = document.getElementById('install-modal-bg');
+  if(!e || e.target === bg) bg.classList.remove('open');
+}
+
+function registerServiceWorker(){
+  if(!('serviceWorker' in navigator) || location.protocol === 'file:'){
+    updateInstallButton();
+    return;
+  }
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => {}).finally(updateInstallButton);
+  });
+}
+registerServiceWorker();
+window.addEventListener('load', updateInstallButton);
+window.addEventListener('resize', updateInstallButton);
 
 setInterval(checkRealtimeTrigger, RT_POLL_MS);
 checkRealtimeTrigger();
