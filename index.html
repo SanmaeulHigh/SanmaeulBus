@@ -315,9 +315,17 @@ function bus3000Panel(){
   let h=`<div class="schedule-panel"><div class="sched-title">강화터미널 출발 · 3000번 ${bus3000Tag()} 시간표</div>`;
   if(nx){const cd=toMin(nx)-n;h+=`<div class="sched-next"><span class="nt">${nx}</span><span class="${cd<8?'cd soon':'cd'}">${fmtCd(cd)}</span><span class="nmore">강화터미널 출발 기준</span></div>`;}
   else{h+=`<div class="endmsg">오늘 운행 종료 (막차 ${last}) · 카카오맵에서 확인</div>`;}
-  h+=`<div class="sched-strip">`;
+  const stripId='sched-strip-3000';
+  h+=`<div class="sched-strip" id="${stripId}">`;
   arr.forEach(t=>{let cls='sched-chip';if(toMin(t)<n)cls+=' past';if(t===nx)cls+=' next-dep';h+=`<span class="${cls}">${t}</span>`;});
   h+=`</div></div>`;
+  // 다음 출발 차량이 보이도록 자동 스크롤 (렌더 직후)
+  setTimeout(()=>{
+    const strip=document.getElementById(stripId);
+    if(!strip) return;
+    const nextEl=strip.querySelector('.next-dep');
+    if(nextEl) strip.scrollLeft=Math.max(0,nextEl.offsetLeft-12);
+  },50);
   return h;
 }
 
