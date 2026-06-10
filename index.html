@@ -67,6 +67,7 @@
   .cpath{font-size:11.5px;color:var(--navy2);font-weight:600;line-height:1.5;margin:7px 0 2px;}
   .cpath .ar{color:var(--blue);font-weight:800;}
   .cpath .st{background:var(--panel);border:1px solid var(--line);border-radius:5px;padding:1px 5px;white-space:nowrap;}
+  .stop-chip{background:var(--panel);border:1px solid var(--line);border-radius:5px;padding:1px 5px;white-space:nowrap;font-size:11.5px;color:var(--navy2);font-weight:700;margin-left:auto;}
 
   /* Route number badge */
   .rno{display:inline-flex;align-items:center;gap:5px;vertical-align:middle;}
@@ -87,7 +88,7 @@
   .transfer::-webkit-scrollbar{display:none;}
   .transfer .rail-list{justify-content:flex-end;gap:3px;flex-wrap:nowrap;min-width:max-content;}
   .transfer .rail-logo{width:14px;height:14px;}
-  @media (max-width:420px){.lhead{gap:5px;}.ltag{font-size:9px;}.ibtn{width:15px;height:15px;font-size:9px;}.transfer{font-size:8.8px;max-width:calc(100% - 92px);}.transfer .rail-list{gap:2px;}.transfer .rail-logo{width:12px;height:12px;}.rail-sep{margin:0;}}
+  @media (max-width:420px){.lhead{gap:5px;}.ltag{font-size:9px;}.stop-chip{font-size:10px;padding:1px 4px;}.ibtn{width:15px;height:15px;font-size:9px;}.transfer{font-size:8.8px;max-width:calc(100% - 92px);}.transfer .rail-list{gap:2px;}.transfer .rail-logo{width:12px;height:12px;}.rail-sep{margin:0;}}
 
   /* ⓘ info button */
   .ibtn{display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;
@@ -181,7 +182,7 @@
 <footer>
   <div class="disc">
     ⚠ 모든 시각은 과거 운행 기반 <b>예상 시각(평일 기준)</b>입니다. 교통 상황에 따라 달라지니 탑승 전 <b>카카오맵 실시간 위치</b>를 꼭 확인하세요. 주말·휴일은 카카오맵에서 확인해 주세요.
-    <div class="stops">정류장 — 학교 주차장 입구 <b>43599</b> · 산문입구(귀가/구래·검단) <b>43286</b> · 산문입구(강화터미널) <b>43107</b></div>
+    <div class="stops">정류장 — 학교 주차장 입구(<b>43599</b>) · 산문입구(<b>43286</b>) 귀가/구래·검단 · 산문입구(<b>43107</b>) 강화터미널</div>
   </div>
   <div class="upd">ⓒ Sanmaeul High School., 2026.<br>데이터 제공처 : 인천광역시 / 강화군 / (주)카카오</div>
 </footer>
@@ -204,12 +205,27 @@ const GANGHWA="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACkAAAAwCAYAAACMuVO
 const KAKAO_ICON="data:image/png;base64,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";
 
 /* 시간표 데이터 */
+const BUS605_DEP=["04:50","05:50","06:40","07:30","08:20","09:20","10:20","11:20","12:20","13:20","14:30","15:35","16:40","17:45","18:50","19:55","21:00"];
 const DATA={
   bus71:[["05:25","05:10"],["06:06","05:50"],["06:45","06:30"],["07:16","07:00"],["07:46","07:30"],["08:17","08:00"],["08:48","08:30"],["09:17","09:00"],["10:19","10:00"],["11:16","11:00"],["12:07","11:50"],["12:37","12:20"],["13:07","12:50"],["13:37","13:20"],["14:07","13:50"],["14:36","14:20"],["15:07","14:50"],["15:57","15:40"],["16:46","16:30"],["17:37","17:20"],["18:07","17:50"],["18:37","18:20"],["19:07","18:50"],["19:36","19:20"],["20:05","19:50"],["21:07","20:50"],["22:17","22:00"]],
-  bus605:[["05:03","04:50"],["06:06","05:50"],["06:56","06:40"],["07:47","07:30"],["08:36","08:20"],["09:37","09:20"],["10:37","10:20"],["11:36","11:20"],["12:36","12:20"],["13:37","13:20"],["14:47","14:30"],["15:51","15:35"],["16:56","16:40"],["18:01","17:45"],["19:06","18:50"],["20:13","19:55"],["21:17","21:00"]],
+  bus605ByDay:{
+    mon:["05:03","06:06","06:58","07:46","08:36","09:35","10:37","11:37","12:37","13:37","14:47","15:51","16:56","18:01","19:05","20:10","21:17"],
+    tue:["05:02","06:05","06:58","07:47","08:36","09:37","10:36","11:36","12:37","13:36","14:46","15:51","16:57","18:02","19:05","20:12","21:16"],
+    wed:["05:03","06:06","06:58","07:48","08:37","09:39","10:37","11:38","12:37","13:37","14:47","15:52","16:57","18:02","19:05","20:10","21:17"],
+    thu:["05:03","06:06","06:58","07:45","08:37","09:35","10:37","11:38","12:37","13:37","14:47","15:51","16:57","18:01","19:07","20:11","21:18"],
+    fri:["05:03","06:06","06:56","07:47","08:36","09:37","10:37","11:36","12:36","13:37","14:47","15:51","16:56","18:01","19:06","20:13","21:17"]
+  },
   bus45:["06:09","07:26","18:47","19:48"],
   bus46:["09:44","10:44","13:15","14:31","16:29"]
 };
+function pairWithDepartures(arr,dep=BUS605_DEP){return arr.map((t,i)=>[t,dep[i]]);}
+function weekdayKey(){return ["sun","mon","tue","wed","thu","fri","sat"][new Date().getDay()];}
+function bus605Today(){return pairWithDepartures(DATA.bus605ByDay[weekdayKey()]||DATA.bus605ByDay.fri);}
+function bus605Tag(){
+  const names={mon:"월요일",tue:"화요일",wed:"수요일",thu:"목요일",fri:"금요일",sat:"토요일",sun:"휴일"};
+  const k=weekdayKey();
+  return `좌석 · ${names[k]||"금요일"} 기준 평균`;
+}
 const KAKAO={st43286:"https://map.kakao.com/?map_type=TYPE_MAP&busStopId=BS104504&urlLevel=1&urlX=372114&urlY=1163217",st43599:"https://map.kakao.com/?map_type=TYPE_MAP&busStopId=BS104817&urlLevel=1&urlX=373331&urlY=1162955",st43107:"https://map.kakao.com/?map_type=TYPE_MAP&busStopId=BS104325&urlLevel=1&urlX=371892&urlY=1163217"};
 const WALK_MIN=15;
 let mode='home', walkOn=true;
@@ -230,7 +246,7 @@ function railIcon(key,label){return `<img class="rail-logo" src="${RAIL[key]}" a
 function railStation(icons,name){return `<span class="rail-item">${icons.map(([k,l])=>railIcon(k,l)).join('')}${name}</span>`;}
 function railSep(){return `<span class="rail-sep">/</span>`;}
 function transfer71(){return `<span class="transfer"><span class="rail-list">${railStation([["gold","김포골드라인"]],"구래")}${railSep()}${railStation([["incheon2","인천2호선"]],"검단사거리")}${railSep()}${railStation([["arex","공항철도"]],"검암")}</span></span>`;}
-function transfer605(){return `<span class="transfer"><span class="rail-list">${railStation([["gold","김포골드라인"]],"운양")}${railSep()}${railStation([["line5","5호선"],["line9","9호선"],["arex","공항철도"],["seohae","서해선"],["gold","김포골드라인"]],"김포공항")}</span></span>`;}
+function transfer605(){return `<span class="transfer"><span class="rail-list">${railStation([["gold","김포골드라인"]],"운양")}${railSep()}${railStation([["line5","5호선"],["line9","9호선"],["seohae","서해선"],["gold","김포골드라인"],["arex","공항철도"]],"김포공항")}</span></span>`;}
 
 /* 요일별 수업 종료 시각 */
 function getEndMin(){
@@ -287,34 +303,34 @@ function lineBlock(num,tag,items,hasDep,offsetWalk,transferHtml=""){
 }
 
 function kbtn(url,stnum,label){
-  return `<a class="kbtn" href="${url}" target="_blank" rel="noopener"><img src="${KAKAO_ICON}" alt="">${label} <span class="stnum">정류장 ${stnum}</span></a>`;
+  return `<a class="kbtn" href="${url}" target="_blank" rel="noopener"><img src="${KAKAO_ICON}" alt="">${label} <span class="stnum">(${stnum})</span></a>`;
 }
 
 function viewHome(){
   let h=``;
   h+=`<div class="walk"><div>🚶 지금 학교에서 출발 기준<div class="sub">현재 시각 + 도보 12~15분, 탈 수 있는 차만 표시</div></div><div class="sw ${walkOn?'on':''}" onclick="toggleWalk()"></div></div>`;
-  h+=`<div class="card rec"><div class="ctop"><span class="pill blue">루트 ①</span><span class="pill rec">가장 많이 이용</span><span class="cname">지하철 환승</span></div>
+  h+=`<div class="card rec"><div class="ctop"><span class="pill blue">루트 ①</span><span class="pill rec">가장 많이 이용</span><span class="cname">지하철 환승</span><span class="stop-chip">산문입구(43286)</span></div>
     ${lineBlock("71","간선 · 실측 기반",DATA.bus71,true,true,transfer71())}
-    ${lineBlock("60-5","좌석 · 실측 기반",DATA.bus605,true,true,transfer605())}
-    ${kbtn(KAKAO.st43286,"43286","카카오맵에서 산문입구 열기")}</div>`;
+    ${lineBlock("60-5",bus605Tag(),bus605Today(),true,true,transfer605())}
+    ${kbtn(KAKAO.st43286,"43286","카카오맵에서 산문입구 실시간 도착정보 열기")}</div>`;
   h+=`<div class="card"><div class="ctop"><span class="pill navy">루트 ②</span>${rno("3000")}<span class="cname">직행좌석 · 신촌행</span></div>
     <div class="cpath"><span class="st">강화터미널</span> <span class="ar">→</span> 3000번 직행좌석 환승</div>
-    <div class="callout">소요 시간이 길어 서울 방면도 대부분 <b>루트 ①</b>을 이용해요. 강화터미널(43096)까지 이동 후 환승하는 참고용 경로입니다.</div></div>`;
+    <div class="callout">소요 시간이 길어 서울 방면도 대부분 <b>루트 ①</b>을 이용해요. 강화터미널까지 이동 후 환승하는 참고용 경로입니다.</div></div>`;
   h+=prepBtn();return h;
 }
 
 function viewOut(){
   let h=`<div class="hint">강화읍(터미널)로 나가는 경로예요. <b>학교 주차장 앞에서 바로 탑승</b>할 수 있어요(도보 불필요).</div>`;
   h+=`<div class="card"><div class="ctop"><span class="pill navy">루트 ③</span><span class="cname">학교 앞 → 강화터미널</span></div>
-    <div class="cpath"><span class="st">주차장 입구 43599</span> <span class="ar">→</span> <span class="st">강화터미널</span></div>
+    <div class="cpath"><span class="st">주차장 입구(43599)</span> <span class="ar">→</span> <span class="st">강화터미널</span></div>
     ${lineBlock("46","지선",DATA.bus46,false,false)}
     ${lineBlock("45","지선",DATA.bus45,false,false)}
-    ${kbtn(KAKAO.st43599,"43599","카카오맵에서 학교앞 정류장 열기")}</div>`;
+    ${kbtn(KAKAO.st43599,"43599","카카오맵에서 학교앞 정류장 실시간 도착정보 열기")}</div>`;
   h+=`<div class="card"><div class="ctop"><span class="pill navy">루트 ④</span><span class="cname">산문입구 → 강화터미널</span></div>
-    <div class="cpath"><span class="st">산문입구 43107</span> <span class="ar">→</span> <span class="st">강화터미널</span></div>
+    <div class="cpath"><span class="st">산문입구(43107)</span> <span class="ar">→</span> <span class="st">강화터미널</span></div>
     <div class="badgerow">${rno("71")}${rno("60-5")}${rno("40")}${rno("41")}</div>
-    <div class="callout">이 방향(강화읍 방향)은 배차가 잦고 노선이 많아 시간표 대신 <b>실시간 확인</b>을 권장해요. 도보 12~15분을 더해서 계산하며 나가세요.</div>
-    ${kbtn(KAKAO.st43107,"43107","카카오맵에서 산문입구 열기")}</div>`;
+    <div class="callout">이 방향(강화행)은 배차가 잦고 노선이 많아 시간표 대신 <b>실시간 확인</b>을 권장해요. 도보 12~15분을 역산해 나가세요.</div>
+    ${kbtn(KAKAO.st43107,"43107","카카오맵에서 산문입구 실시간 도착정보 열기")}</div>`;
   h+=prepBtn();return h;
 }
 
