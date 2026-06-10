@@ -230,7 +230,7 @@ function railIcon(key,label){return `<img class="rail-logo" src="${RAIL[key]}" a
 function railStation(icons,name){return `<span class="rail-item">${icons.map(([k,l])=>railIcon(k,l)).join('')}${name}</span>`;}
 function railSep(){return `<span class="rail-sep">/</span>`;}
 function transfer71(){return `<span class="transfer"><span class="rail-list">${railStation([["gold","김포골드라인"]],"구래")}${railSep()}${railStation([["incheon2","인천2호선"]],"검단사거리")}${railSep()}${railStation([["arex","공항철도"]],"검암")}</span></span>`;}
-function transfer605(){return `<span class="transfer"><span class="rail-list">${railStation([["gold","김포골드라인"]],"운양")}${railSep()}${railStation([["line5","5호선"],["line9","9호선"],["seohae","서해선"],["gold","김포골드라인"],["arex","공항철도"]],"김포공항")}</span></span>`;}
+function transfer605(){return `<span class="transfer"><span class="rail-list">${railStation([["gold","김포골드라인"]],"운양")}${railSep()}${railStation([["line5","5호선"],["line9","9호선"],["arex","공항철도"],["seohae","서해선"],["gold","김포골드라인"]],"김포공항")}</span></span>`;}
 
 /* 요일별 수업 종료 시각 */
 function getEndMin(){
@@ -299,7 +299,7 @@ function viewHome(){
     ${kbtn(KAKAO.st43286,"43286","카카오맵에서 산문입구 열기")}</div>`;
   h+=`<div class="card"><div class="ctop"><span class="pill navy">루트 ②</span>${rno("3000")}<span class="cname">직행좌석 · 신촌행</span></div>
     <div class="cpath"><span class="st">강화터미널</span> <span class="ar">→</span> 3000번 직행좌석 환승</div>
-    <div class="callout">소요 시간이 길어 서울 방면도 대부분 <b>루트 ①</b>을 이용해요. 강화터미널까지 이동 후 환승하는 참고용 경로입니다.</div></div>`;
+    <div class="callout">소요 시간이 길어 서울 방면도 대부분 <b>루트 ①</b>을 이용해요. 강화터미널(43096)까지 이동 후 환승하는 참고용 경로입니다.</div></div>`;
   h+=prepBtn();return h;
 }
 
@@ -313,7 +313,7 @@ function viewOut(){
   h+=`<div class="card"><div class="ctop"><span class="pill navy">루트 ④</span><span class="cname">산문입구 → 강화터미널</span></div>
     <div class="cpath"><span class="st">산문입구 43107</span> <span class="ar">→</span> <span class="st">강화터미널</span></div>
     <div class="badgerow">${rno("71")}${rno("60-5")}${rno("40")}${rno("41")}</div>
-    <div class="callout">이 방향(강화행)은 배차가 잦고 노선이 많아 시간표 대신 <b>실시간 확인</b>을 권장해요. 도보 12~15분을 더해서 계산하며 나가세요.</div>
+    <div class="callout">이 방향(강화읍 방향)은 배차가 잦고 노선이 많아 시간표 대신 <b>실시간 확인</b>을 권장해요. 도보 12~15분을 더해서 계산하며 나가세요.</div>
     ${kbtn(KAKAO.st43107,"43107","카카오맵에서 산문입구 열기")}</div>`;
   h+=prepBtn();return h;
 }
