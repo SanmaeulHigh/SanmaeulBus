@@ -439,6 +439,10 @@ function lineBlock(num,tag,items,hasDep,offsetWalk,transferHtml=""){
   const up=arr.filter(t=>toMin(t)>=threshold);
   const infoBtn=`<span class="ibtn" onclick="openModal()" title="실측 기반이란?">i</span>`;
   let h=`<div class="line"><div class="lhead">${rno(num)}<span class="ltag">${tag}</span> ${infoBtn}${transferHtml}</div>`;
+  // 45/46 LOADING 중 → 시간표 위에 작은 스피너 안내
+  if(useRealtime && rtState[num] && rtState[num].status==="LOADING" && (num==="45"||num==="46")){
+    h+=`<div class="rt-loading" style="margin:4px 0 6px"><span class="rt-spinner"></span>실시간 정보 확인 중...</div>`;
+  }
   if(realtimeFailed){
     h+=`<div class="rt-fail">⚠ 실시간 정보를 불러오지 못했습니다.<br>아래 시각은 요일별 과거 운행 기반 예상 시각입니다.</div>`;
   }
@@ -743,13 +747,20 @@ function fakeDepMin(arrTime, travelMin){
 
 function realtimeWindowActive(routeNum){
   const n = nowMin();
+  const st = rtState[routeNum];
+  const liveExtra = (st && st.status === "LIVE") ? 10 : 0;
+  // 45/46: 도착 예정 10분 전부터, 도착 후 5분(LIVE면 +10분)까지
+  if(routeNum === "45" || routeNum === "46"){
+    return realtimePairsToday(routeNum).some(pair => {
+      const a = toMin(pair[0]);
+      return n >= a - 10 && n <= a + 5 + liveExtra;
+    });
+  }
+  // 71/60-5: 강화터미널 출발 +2분부터, 도착 후 5분(LIVE면 +10분)까지
   return realtimePairsToday(routeNum).some(pair => {
     const arr = pair[0], dep = pair[1];
     if(!arr || !dep) return false;
-    const d = toMin(dep);
-    const a = toMin(arr);
-    // 출발 2분 뒤부터 예상 도착 시각 + 5분까지만 실시간 정보를 우선 표시
-    return n >= d + 2 && n <= a + 5;
+    return n >= toMin(dep) + 2 && n <= toMin(arr) + 5 + liveExtra;
   });
 }
 
