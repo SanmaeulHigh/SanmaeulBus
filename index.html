@@ -219,6 +219,9 @@
     .install-btn{padding:5px 9px;font-size:10px;min-height:26px;}
   }
 
+  .offline-bar{display:none;position:sticky;top:106px;z-index:14;background:#7A2D22;color:#fff;
+    font-size:11.5px;font-weight:700;text-align:center;padding:5px 12px;}
+  .offline-bar.show{display:block;}
 </style>
 </head>
 <body>
@@ -240,6 +243,7 @@
 </div>
 
 
+<div class="offline-bar" id="offlineBar">📡 오프라인 — 실시간 정보를 사용할 수 없습니다. 시간표만 표시됩니다.</div>
 <div class="wrap" id="view"></div>
 
 <footer>
@@ -305,8 +309,16 @@ const DATA={
     sat:["05:03","05:45","06:48","07:46","09:47","10:47","11:48","12:48","14:18","15:17","17:18","18:48","19:58","21:17"],
     sun:["05:04","05:45","06:48","07:46","09:46","10:46","11:46","12:48","14:17","15:15","17:18","18:48","19:58","21:17"]
   },
-  bus45:["06:09","07:26","18:47","19:48"],
-  bus46:["09:44","10:44","13:15","14:31","16:29"]
+  bus45:{
+    weekday:["06:09","07:26","18:47","19:48"],
+    sat:    ["06:08","07:28","18:47","19:48"],
+    sun:    ["06:08","07:27","18:47","19:48"]
+  },
+  bus46:{
+    weekday:["09:44","10:44","13:15","14:31","16:29"],
+    sat:    ["09:27","10:27","12:57","14:15","16:13"],
+    sun:    ["09:25","10:25","14:13","16:11"]
+  }
 };
 
 const BUS3000={
@@ -342,6 +354,8 @@ function rno(num){const c=RNO[num];return `<span class="rno"><img class="rlogo" 
 function rnoToggle(num){return `<button class="rno-btn" type="button" onclick="toggle3000(event)" aria-expanded="${bus3000Open?'true':'false'}" title="3000번 강화터미널 출발 시간표 열기/닫기">${rno(num)}</button>`;}
 function toggle3000(e){if(e)e.stopPropagation();bus3000Open=!bus3000Open;render();}
 function bus3000Today(){const k=weekdayKey();return k==='sat'?BUS3000.sat:(k==='sun'?BUS3000.sun:BUS3000.weekday);}
+function bus45Today(){const k=weekdayKey();return DATA.bus45[k]||DATA.bus45.weekday;}
+function bus46Today(){const k=weekdayKey();return DATA.bus46[k]||DATA.bus46.weekday;}
 function bus3000Tag(){const k=weekdayKey();return k==='sat'?'토요일':(k==='sun'?'공휴일':'평일');}
 function bus3000Panel(){
   const arr=bus3000Today(), n=nowMin();
@@ -409,7 +423,8 @@ function closeModal(e){if(!e||e.target===document.getElementById('modal-bg'))doc
 
 function lineBlock(num,tag,items,hasDep,offsetWalk,transferHtml=""){
   // 실시간 상태이면 rtBlock 우선 사용 (귀가 탭, 71/60-5)
-  const useRealtime = (mode==='home' && (num==='71'||num==='60-5'));
+  const useRealtime = (mode==='home' && (num==='71'||num==='60-5'))
+                  || (mode==='out' && (num==='45'||num==='46'));
   const realtimeFailed = useRealtime && rtState[num] && rtState[num].status === "FAIL";
   const realtimePassed = useRealtime && rtState[num] && rtState[num].status === "PASSED";
   if(useRealtime){
@@ -466,8 +481,8 @@ function viewHome(){
 function viewOut(){
   let h='';
   h+=`<div class="card"><div class="ctop"><span class="pill navy">루트 ③</span><span class="cname">학교 앞 → 강화터미널</span><span class="stop-chip">산마을고등학교(43599)</span></div>
-    ${lineBlock("46","지선",DATA.bus46,false,false)}
-    ${lineBlock("45","지선",DATA.bus45,false,false)}
+    ${lineBlock("46","지선",bus46Today(),false,false)}
+    ${lineBlock("45","지선",bus45Today(),false,false)}
     ${kbtn(KAKAO.st43599,"43599","카카오맵에서 산마을고등학교 실시간 도착정보 열기")}</div>`;
   h+=`<div class="card"><div class="ctop"><span class="pill navy">루트 ④</span><span class="cname">산문입구 → 강화터미널</span><span class="stop-chip">산문입구(43107)</span></div>
     <div class="badgerow">${rno("71")}${rno("60-5")}${rno("40")}${rno("41")}</div>
@@ -482,7 +497,7 @@ function render(){
   document.getElementById('view').innerHTML=(mode==='home')?viewHome():viewOut();
   applyKakaoBlinkState();
 }
-function setMode(m){mode=m;document.getElementById('tab-home').classList.toggle('on',m==='home');document.getElementById('tab-out').classList.toggle('on',m==='out');render();}
+function setMode(m){mode=m;checkRealtimeTrigger();document.getElementById('tab-home').classList.toggle('on',m==='home');document.getElementById('tab-out').classList.toggle('on',m==='out');render();}
 function toggleWalk(){walkOn=!walkOn;render();}
 function tick(){
   const d=new Date();
@@ -501,9 +516,8 @@ function tick(){
 const WORKER_URL = "https://sanmaeul-bus.choiyunhwan.workers.dev";
 
 // 귀가 방향 정류소
-const RT_STOP = {"71":"43286","60-5":"43286"};
+const RT_STOP = {"71":"43286","60-5":"43286","45":"43599","46":"43599"};
 const RT_POLL_MS = 30000; // 실시간 API 재조회 간격: 30초
-const RT_STOP_POLL_MS = 20000; // 정거장/위치 갱신 간격: 20초
 const REALTIME_ETA_OFFSET_SEC = 60; // 카카오맵 대비 표시 보정: 화면 표시용으로 60초 차감
 const SOON_ARRIVAL_THRESHOLD_SEC = 90; // 보정 후 남은 시간이 90초 이하이면 잠시 후 도착으로 표시
 const RT_RETRY_MS = 12000;
@@ -513,6 +527,8 @@ const RT_FAIL_RECOVER_MS = 45000;
 const rtState = {
   "71":   {status:"SCHEDULE", data:null, failCount:0, emptyCount:0, timer:null, failTimer:null, stopTimer:null},
   "60-5": {status:"SCHEDULE", data:null, failCount:0, emptyCount:0, timer:null, failTimer:null, stopTimer:null},
+  "45":   {status:"SCHEDULE", data:null, failCount:0, emptyCount:0, timer:null, failTimer:null, stopTimer:null},
+  "46":   {status:"SCHEDULE", data:null, failCount:0, emptyCount:0, timer:null, failTimer:null, stopTimer:null},
 };
 
 function escapeHTML(v){
@@ -626,25 +642,17 @@ async function pollOnce(routeNum){
   // 이미 표시 중인 남은 시간보다 API 값이 늘어나면 ETA는 반영하지 않음
   // 다만 정류장 수/현재 위치/막차 여부는 최신값으로 갱신합니다.
   // 예: 3분 10초 → 4분 20초처럼 늘어나는 표시는 막되, 2정거장 전 → 1정거장 전 정보는 반영
-  // ETA 역전 방지: 90초 이내 증가 → 클램프, 90초 초과 → 실제 지연으로 수용
-  const ETA_CLAMP_TOLERANCE = 90;
   const prevRemain = remainingEta(st.data);
   if(st.status === "LIVE" && prevRemain !== null && result.etaSec > prevRemain){
-    const diff = result.etaSec - prevRemain;
-    if(diff <= ETA_CLAMP_TOLERANCE){
-      st.data = {
-        ...st.data,
-        stopsBefore: result.stopsBefore,
-        currentStop: result.currentStop,
-        isLastBus: result.isLastBus,
-        etaSec: prevRemain,
-        fetchedAt: Date.now(),
-        etaClamped: true
-      };
-    } else {
-      // 대폭 증가 → 실제 지연, 상향 수용
-      st.data = {...result, fetchedAt: Date.now(), etaClamped: false};
-    }
+    st.data = {
+      ...st.data,
+      stopsBefore: result.stopsBefore,
+      currentStop: result.currentStop,
+      isLastBus: result.isLastBus,
+      etaSec: prevRemain,
+      fetchedAt: Date.now(),
+      etaClamped: true
+    };
     setStatus(routeNum, "LIVE");
     scheduleNext(routeNum, RT_POLL_MS);
     return;
@@ -653,35 +661,6 @@ async function pollOnce(routeNum){
   st.data = {...result, fetchedAt: Date.now(), etaClamped: false};
   setStatus(routeNum, "LIVE");
   scheduleNext(routeNum, RT_POLL_MS);
-  scheduleStopUpdate(routeNum);
-}
-
-// 정거장 수 / 현재 위치만 20초마다 빠르게 갱신 (ETA 카운트다운은 유지)
-async function pollStopOnly(routeNum){
-  const st = rtState[routeNum];
-  if(!st || st.status !== "LIVE") return;
-  const result = await fetchArrival(routeNum);
-  if(result && result.stopsBefore !== undefined){
-    st.data = {...st.data,
-      stopsBefore: result.stopsBefore,
-      currentStop: result.currentStop,
-      isLastBus: result.isLastBus
-    };
-    // DOM 직접 업데이트 (렌더 없이)
-    const stopsText = (result.stopsBefore === null || result.stopsBefore === undefined)
-      ? "정거장 정보 확인 중" : result.stopsBefore + "정거장 전";
-    document.querySelectorAll(".rt-stops").forEach(el => el.textContent = stopsText);
-    document.querySelectorAll(".rt-currstop").forEach(el => el.textContent = result.currentStop || "");
-  }
-}
-
-function scheduleStopUpdate(routeNum){
-  const st = rtState[routeNum];
-  if(st.stopTimer) clearTimeout(st.stopTimer);
-  st.stopTimer = setTimeout(async () => {
-    await pollStopOnly(routeNum);
-    if(rtState[routeNum].status === "LIVE") scheduleStopUpdate(routeNum);
-  }, RT_STOP_POLL_MS);
 }
 
 function scheduleNext(routeNum, delay=RT_POLL_MS){
@@ -752,28 +731,36 @@ function resetRealtime(routeNum){
 function realtimePairsToday(routeNum){
   if(routeNum === "71") return bus71Today();
   if(routeNum === "60-5") return bus605Today();
+  if(routeNum === "45") return bus45Today().map(t => [t, fakeDepMin(t,12)]);
+  if(routeNum === "46") return bus46Today().map(t => [t, fakeDepMin(t,12)]);
   return [];
+}
+function fakeDepMin(arrTime, travelMin){
+  const [h,m] = arrTime.split(":").map(Number);
+  const dep = (h*60+m) - travelMin;
+  return String(Math.floor(dep/60)).padStart(2,"0")+":"+String(dep%60).padStart(2,"0");
 }
 
 function realtimeWindowActive(routeNum){
   const n = nowMin();
-  const st = rtState[routeNum];
-  // LIVE 중이면 윈도우 +10분 연장 — 지연 버스가 윈도우 밖으로 튕겨나가는 것 방지
-  const extraMin = (st && st.status === "LIVE") ? 10 : 0;
   return realtimePairsToday(routeNum).some(pair => {
     const arr = pair[0], dep = pair[1];
     if(!arr || !dep) return false;
     const d = toMin(dep);
     const a = toMin(arr);
-    return n >= d + 2 && n <= a + 5 + extraMin;
+    // 출발 2분 뒤부터 예상 도착 시각 + 5분까지만 실시간 정보를 우선 표시
+    return n >= d + 2 && n <= a + 5;
   });
 }
 
 function checkRealtimeTrigger(){
   Object.keys(rtState).forEach(num => {
     const st = rtState[num];
+    const isHomeRoute = (num==="71"||num==="60-5");
+    const isOutRoute  = (num==="45"||num==="46");
+    if(isHomeRoute && mode!=="home"){if(st.status!=="SCHEDULE")resetRealtime(num);return;}
+    if(isOutRoute  && mode!=="out") {if(st.status!=="SCHEDULE")resetRealtime(num);return;}
     const running = realtimeWindowActive(num);
-
     if(running && st.status === "SCHEDULE") startRealtime(num);
     if(!running && st.status !== "SCHEDULE") resetRealtime(num);
   });
@@ -802,7 +789,9 @@ function rtBlock(routeNum, lineTag, transferHtml){
     return null;
   }
 
-  if(st.status === "SCHEDULE") return null; // 기존 시간표 사용
+  if(st.status === "SCHEDULE") return null;
+  // 45/46 LOADING 중엔 시간표 fallback 표시
+  if(st.status === "LOADING" && (routeNum==="45"||routeNum==="46")) return null;
 
   if(st.status === "LOADING"){
     const msg = (st.failCount || st.emptyCount)
@@ -838,10 +827,10 @@ function rtBlock(routeNum, lineTag, transferHtml){
         <div class="next-core">
           ${mainTime}
           <span class="rt-badge">🔴 실시간</span>
-          <span class="rt-stops ${soon?'cd soon':'cd'}">${stopsText}</span>
+          <span class="${soon?'cd soon':'cd'}">${stopsText}</span>
         </div>
       </div>
-      <div class="rt-detail">현재 <b class="rt-currstop">${a.currentStop}</b> 부근${a.isLastBus?' · <span class="last-badge">막차</span>':''}</div>
+      <div class="rt-detail">현재 <b>${a.currentStop}</b> 부근${a.isLastBus?' · <span class="last-badge">막차</span>':''}</div>
     </div>
   </div>`;
 }
@@ -961,18 +950,13 @@ window.addEventListener('load', updateInstallButton);
 window.addEventListener('resize', updateInstallButton);
 
 
-// ④ 백그라운드 복귀 시 즉시 재조회
-document.addEventListener('visibilitychange', () => {
-  if(document.visibilityState !== 'visible') return;
-  checkRealtimeTrigger();
-  Object.keys(rtState).forEach(num => {
-    const st = rtState[num];
-    if(st.status === 'LIVE'){
-      clearRealtimeTimers(st);
-      pollOnce(num);
-    }
-  });
-});
+// ⑨ 오프라인 감지
+function updateOnlineStatus(){
+  const bar=document.getElementById("offlineBar");if(!bar)return;
+  bar.classList.toggle("show",!navigator.onLine);
+}
+window.addEventListener("online", updateOnlineStatus);
+window.addEventListener("offline",updateOnlineStatus);
 setInterval(checkRealtimeTrigger, RT_POLL_MS);
 checkRealtimeTrigger();
 
