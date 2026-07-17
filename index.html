@@ -422,6 +422,17 @@ function openModal(){document.getElementById('modal-bg').classList.add('open');}
 function closeModal(e){if(!e||e.target===document.getElementById('modal-bg'))document.getElementById('modal-bg').classList.remove('open');}
 
 function lineBlock(num,tag,items,hasDep,offsetWalk,transferHtml=""){
+  // 하계방학 감축운행 기간: 71번 정보 숨김 + 안내 배너
+  if(num === "71" && is71Hidden()){
+    return `<div class="line">
+      <div class="lhead">${rno(num)}<span class="ltag">${tag}</span>${transferHtml}</div>
+      <div class="rt-fail" style="background:#FFF7E8;color:#6B4E12;">
+        🚧 <b>하계방학 감축운행 기간</b>(7.23~8.17)에는 71번 운행 시각이 평소와 달라요.<br>
+        시간표 혼동을 막기 위해 잠시 가려두었어요. <b>카카오맵</b>에서 실시간으로 확인해 주세요.<br>
+        <span style="font-size:10.5px;color:#8B6B2A;">8월 18일부터 정상 운행과 함께 다시 표시됩니다.</span>
+      </div>
+    </div>`;
+  }
   // 실시간 상태이면 rtBlock 우선 사용 (귀가 탭, 71/60-5)
   const useRealtime = (mode==='home' && (num==='71'||num==='60-5'))
                   || (mode==='out' && (num==='45'||num==='46'));
@@ -517,6 +528,15 @@ function tick(){
    상태: SCHEDULE → LOADING → LIVE / FAIL → SCHEDULE
          LIVE → PASSED → SCHEDULE (버스 지나감)
 ═══════════════════════════════════════════════════════ */
+// 하계방학 감축운행: 71번 정보 임시 숨김 기간 (종료 다음날 자동 복귀)
+const BUS71_HIDE_FROM = "2026-07-17"; // 산마을고 하계방학 시작일
+const BUS71_HIDE_TO   = "2026-08-17"; // 인천시 감축운행 종료일
+function is71Hidden(){
+  const d = new Date();
+  const ymd = d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+  return ymd >= BUS71_HIDE_FROM && ymd <= BUS71_HIDE_TO;
+}
+
 const WORKER_URL = "https://sanmaeul-bus.choiyunhwan.workers.dev";
 
 // 귀가 방향 정류소
@@ -767,6 +787,7 @@ function realtimeWindowActive(routeNum){
 function checkRealtimeTrigger(){
   Object.keys(rtState).forEach(num => {
     const st = rtState[num];
+    if(num === "71" && is71Hidden()){ if(st.status!=="SCHEDULE") resetRealtime(num); return; }
     const isHomeRoute = (num==="71"||num==="60-5");
     const isOutRoute  = (num==="45"||num==="46");
     if(isHomeRoute && mode!=="home"){if(st.status!=="SCHEDULE")resetRealtime(num);return;}
