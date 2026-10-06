@@ -382,7 +382,7 @@ function schedSummary(num){
   const arr=schedToday(num), nx=schedNext(num), n=nowMin();
   if(!nx) return `<div class="tnext"><span class="endmsg" style="margin:0">오늘 운행 종료 (막차 ${arr[arr.length-1]})</span></div>`;
   const cd=toMin(nx)-n;
-  return `<div class="tnext"><span class="tlabel">다음 출발</span><span class="nt">${nx}</span><span class="${cd<8?'cd soon':'cd'}">${fmtCd(cd)}</span></div>`;
+  return `<div class="tnext"><span class="tlabel">다음 출발</span><span class="nt">${nx}</span><span class="${cd<8?'cd soon':'cd'}">${cd<1?'곧 출발':fmtCd(cd)}</span></div>`;
 }
 function schedPanel(num){
   const arr=schedToday(num), n=nowMin(), nx=schedNext(num);
