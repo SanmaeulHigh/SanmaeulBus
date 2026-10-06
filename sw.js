@@ -1,4 +1,4 @@
-const CACHE_NAME = 'sanmaeul-bus-pwa-v1';
+const CACHE_NAME = 'sanmaeul-bus-pwa-v2-20261006';
 const APP_SHELL = ['./'];
 
 self.addEventListener('install', (event) => {
