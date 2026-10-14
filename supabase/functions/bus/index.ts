@@ -69,6 +69,12 @@ Deno.serve(async (req: Request) => {
   const key = keyParam();
 
   try {
+    // 무료 프로젝트 자동 일시정지 방지: 데이터베이스에 가벼운 쿼리를 보내 '활동'을 남긴다.
+    // GitHub Actions(.github/workflows/supabase-keepalive.yml)가 매일 이 주소를 부른다.
+    if (path === "/keepalive") {
+      return json({ ok: true, at: new Date().toISOString(), region: region(), db: await touchDatabase() });
+    }
+
     if (path === "/health" || path === "/") {
       const fresh = url.searchParams.get("fresh") === "1";
       const [stop, arrive, loc] = await Promise.all([
@@ -121,11 +127,42 @@ Deno.serve(async (req: Request) => {
       return json({ query: name, count: stops.length, stops, upstream: meta(up), region: region() });
     }
 
-    return json({ error: "not found", endpoints: ["/bus/health", "/bus/arrive?stop=43286&route=71", "/bus/buses?route=71", "/bus/stops?name=산문입구"] }, 404);
+    return json({ error: "not found", endpoints: ["/bus/health", "/bus/keepalive", "/bus/arrive?stop=43286&route=71", "/bus/buses?route=71", "/bus/stops?name=산문입구"] }, 404);
   } catch (e) {
     return json({ error: String((e as Error)?.message || e) }, 500);
   }
 });
+
+// ─── 프로젝트 활동 기록: 직접 DB 쿼리 + REST(PostgREST) 요청 ───
+// 두 값 모두 Supabase가 함수에 자동으로 넣어 주는 환경변수라 따로 설정할 필요가 없다.
+async function touchDatabase() {
+  const result: Record<string, string> = {};
+  const dbUrl = Deno.env.get("SUPABASE_DB_URL");
+  if (dbUrl) {
+    try {
+      const { default: postgres } = await import("npm:postgres@3.4.5");
+      const sql = postgres(dbUrl, { max: 1, prepare: false, idle_timeout: 2, connect_timeout: 8 });
+      const rows = await sql`select now() as now`;
+      await sql.end({ timeout: 2 });
+      result.sql = "ok " + String(rows[0]?.now ?? "");
+    } catch (e) {
+      result.sql = "error: " + String((e as Error)?.message || e).slice(0, 120);
+    }
+  } else result.sql = "skipped (no SUPABASE_DB_URL)";
+
+  const base = Deno.env.get("SUPABASE_URL");
+  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || Deno.env.get("SUPABASE_ANON_KEY");
+  if (base && key) {
+    try {
+      const res = await fetch(`${base}/rest/v1/`, { headers: { apikey: key, Authorization: `Bearer ${key}` } });
+      result.rest = "HTTP " + res.status;
+      await res.body?.cancel();
+    } catch (e) {
+      result.rest = "error: " + String((e as Error)?.message || e).slice(0, 120);
+    }
+  } else result.rest = "skipped (no SUPABASE_URL)";
+  return result;
+}
 
 // ─── 공공데이터포털 호출: 15초 캐시 + 동시 요청 합치기 + 오류 진단 ───
 function upstream(key: string, kind: string, params: Record<string, string | number>, fresh = false): Promise<Up> {

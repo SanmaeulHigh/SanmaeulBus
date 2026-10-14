@@ -1,0 +1,33 @@
+# Supabase 무료 프로젝트는 7일 동안 활동이 없으면 자동으로 일시정지된다.
+# 서울 중계 함수(bus)가 멈추면 앱의 실시간 정보가 끊기므로, 매일 한 번 깨운다.
+name: Supabase 깨우기
+
+on:
+  schedule:
+    - cron: "17 0 * * *"   # 매일 09:17 (한국 시간)
+  workflow_dispatch:         # Actions 탭에서 수동 실행도 가능
+
+permissions:
+  actions: write             # 아래 '예약 실행 유지' 단계용
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 중계 함수로 데이터베이스 활동 남기기
+        run: |
+          curl -fsS --retry 3 --retry-delay 20 \
+            "https://olaehyvzqxfmenqcqldp.supabase.co/functions/v1/bus/keepalive?forceFunctionRegion=ap-northeast-2"
+
+      - name: 실시간 조회 상태 확인 (실패해도 계속)
+        continue-on-error: true
+        run: |
+          curl -sS "https://olaehyvzqxfmenqcqldp.supabase.co/functions/v1/bus/health?forceFunctionRegion=ap-northeast-2" \
+            | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("verdict")); sys.exit(0 if d.get("ok") else 1)'
+
+      # 공개 저장소의 예약 워크플로는 60일간 저장소 활동이 없으면 GitHub이 자동으로 꺼 버린다.
+      # 방학처럼 커밋이 없는 기간에도 꺼지지 않도록 매번 다시 켜 둔다(커밋을 만들지 않음).
+      - name: 예약 실행 유지
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/supabase-keepalive.yml/enable"
